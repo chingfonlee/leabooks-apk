@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckSquare, Play, Square, X } from "lucide-react";
 import type { TvBook } from "../types";
+import { useSpatialNavigation } from "../utils/tvNavigation";
 
 interface AutoplayModalProps {
   books: TvBook[];
@@ -15,6 +16,9 @@ export function AutoplayModal({
   onClose,
   onStartAutoplay,
 }: AutoplayModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  useSpatialNavigation(modalRef, true, onClose);
+
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>(() =>
     books.map((b) => b.slug),
   );
@@ -34,7 +38,11 @@ export function AutoplayModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-panel"
+        ref={modalRef}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h2>自動輪播設定（每頁 {pageDurationSec} 秒）</h2>
           <button className="action-btn" onClick={onClose} aria-label="關閉">
@@ -89,6 +97,7 @@ export function AutoplayModal({
           </button>
           <button
             className="action-btn primary"
+            data-autofocus="true"
             disabled={orderedSelection.length === 0}
             style={{ opacity: orderedSelection.length === 0 ? 0.45 : 1 }}
             onClick={() => onStartAutoplay(orderedSelection)}

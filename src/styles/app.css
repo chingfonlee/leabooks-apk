@@ -54,6 +54,37 @@ button:active {
   transform: scale(0.97);
 }
 
+button:focus,
+input:focus {
+  outline: none;
+}
+
+/* High-visibility golden focus ring for 86-inch TV remote control */
+button:focus-visible,
+input:focus-visible,
+body.tv-remote-mode button:focus,
+body.tv-remote-mode input:focus {
+  outline: 4px solid var(--accent-strong);
+  outline-offset: 4px;
+  box-shadow:
+    0 0 0 8px rgba(243, 181, 82, 0.28),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+  position: relative;
+  z-index: 5;
+}
+
+body.tv-remote-mode .book-cover-btn:focus,
+.book-cover-btn:focus-visible {
+  outline-offset: -4px;
+}
+
+.book-card:has(:focus-visible),
+body.tv-remote-mode .book-card:has(:focus) {
+  border-color: var(--accent-strong);
+  transform: translateY(-4px);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.55);
+}
+
 /* ==================== HOME SHELF ==================== */
 
 .shelf-shell {

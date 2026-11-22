@@ -1,5 +1,7 @@
+import { useRef } from "react";
 import { Volume2, VolumeX, X } from "lucide-react";
 import type { AppSettings } from "../types";
+import { useSpatialNavigation } from "../utils/tvNavigation";
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -20,9 +22,16 @@ export function SettingsModal({
   onChange,
   onClose,
 }: SettingsModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  useSpatialNavigation(modalRef, true, onClose);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-panel"
+        ref={modalRef}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h2>播放與顯示設定</h2>
           <button className="action-btn" onClick={onClose} aria-label="關閉">
@@ -102,7 +111,11 @@ export function SettingsModal({
         </div>
 
         <div className="modal-footer">
-          <button className="action-btn primary" onClick={onClose}>
+          <button
+            className="action-btn primary"
+            data-autofocus="true"
+            onClick={onClose}
+          >
             完成
           </button>
         </div>

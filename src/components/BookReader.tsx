@@ -14,6 +14,7 @@ import {
   buildSubtitleSegments,
   getSegmentIndexAtTime,
 } from "../utils/subtitles";
+import { findNextFocusable, focusElementForTv } from "../utils/tvNavigation";
 
 interface BookReaderProps {
   playlist: TvBook[];
@@ -42,6 +43,8 @@ export function BookReader({
   const [idleRemainingSec, setIdleRemainingSec] = useState<number | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
+  const autoplayBtnRef = useRef<HTMLButtonElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const controlsTimerRef = useRef<number | null>(null);
@@ -222,22 +225,85 @@ export function BookReader({
     return () => window.clearInterval(timer);
   }, [isAutoPlaying, autoResumeArmed, settings.idleResumeSec]);
 
-  // Keyboard support (helpful on PC preview or remote control)
+  // Full TV remote (D-Pad + OK + Back) and keyboard support
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const isOk =
+        e.key === "Enter" ||
+        e.key === "NumpadEnter" ||
+        e.key === "Select" ||
+        e.key === "Accept";
+
+      // When top control bar is visible, D-Pad navigates its buttons
+      if (controlsVisible && topBarRef.current) {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          showControlsTemporarily();
+          const active = document.activeElement as HTMLElement | null;
+          const next = findNextFocusable(
+            topBarRef.current,
+            active && topBarRef.current.contains(active) ? active : null,
+            e.key === "ArrowLeft" ? "left" : "right",
+          );
+          if (next) focusElementForTv(next);
+          return;
+        }
+        if (e.key === "ArrowDown" || e.key === "Escape") {
+          e.preventDefault();
+          setControlsVisible(false);
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          return;
+        }
+        if (isOk) {
+          const active = document.activeElement as HTMLElement | null;
+          if (active && topBarRef.current.contains(active)) {
+            if (e.key === "Select" || e.key === "Accept") {
+              e.preventDefault();
+              active.click();
+            }
+            return;
+          }
+        }
+      }
+
+      // Normal reading mode (controls hidden)
       if (e.key === "ArrowRight" || e.key === " ") {
         e.preventDefault();
         goToNextPage(false);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         goToPrevPage();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        noteUserInteraction(true);
+        if (segments.length > 1) {
+          setManualSegIdx((prev) => (prev + 1) % segments.length);
+        }
+      } else if (e.key === "ArrowUp" || isOk) {
+        e.preventDefault();
+        noteUserInteraction(false);
+        showControlsTemporarily();
+        window.requestAnimationFrame(() => {
+          focusElementForTv(autoplayBtnRef.current);
+        });
       } else if (e.key === "Escape") {
+        e.preventDefault();
         onExit();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goToNextPage, goToPrevPage, onExit]);
+  }, [
+    controlsVisible,
+    goToNextPage,
+    goToPrevPage,
+    noteUserInteraction,
+    onExit,
+    segments.length,
+    showControlsTemporarily,
+  ]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -305,6 +371,7 @@ export function BookReader({
 
       {/* Top floating bar */}
       <div
+        ref={topBarRef}
         className={`reader-top-bar ${controlsVisible ? "" : "hidden"}`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -329,6 +396,7 @@ export function BookReader({
             </button>
           )}
           <button
+            ref={autoplayBtnRef}
             className={`reader-pill-btn ${isAutoPlaying ? "active" : ""}`}
             onClick={handleToggleAutoplay}
           >

@@ -1,7 +1,9 @@
 package com.leabook.tv;
 
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.WindowManager;
+import android.webkit.WebView;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -17,6 +19,13 @@ public class MainActivity extends BridgeActivity {
         // Keep 86-inch display awake while reading/autoplaying
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         applyImmersiveMode();
+        ensureWebViewFocus();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        ensureWebViewFocus();
     }
 
     @Override
@@ -24,6 +33,37 @@ public class MainActivity extends BridgeActivity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             applyImmersiveMode();
+            ensureWebViewFocus();
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        // Normalize Android TV / whiteboard remote OK (DPAD_CENTER) to ENTER for WebView
+        if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER) {
+            KeyEvent mapped = new KeyEvent(
+                event.getDownTime(),
+                event.getEventTime(),
+                event.getAction(),
+                KeyEvent.KEYCODE_ENTER,
+                event.getRepeatCount(),
+                event.getMetaState(),
+                event.getDeviceId(),
+                event.getScanCode(),
+                event.getFlags(),
+                event.getSource()
+            );
+            return super.dispatchKeyEvent(mapped);
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void ensureWebViewFocus() {
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            WebView webView = getBridge().getWebView();
+            webView.setFocusable(true);
+            webView.setFocusableInTouchMode(true);
+            webView.requestFocus();
         }
     }
 

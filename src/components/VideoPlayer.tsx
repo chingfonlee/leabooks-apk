@@ -9,6 +9,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import type { LocalVideoItem } from "../types";
+import { findNextFocusable, focusElementForTv } from "../utils/tvNavigation";
 
 interface VideoPlayerProps {
   videos: LocalVideoItem[];
@@ -35,7 +36,9 @@ export function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const [controlsVisible, setControlsVisible] = useState(true);
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const playBtnRef = useRef<HTMLButtonElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
 
   const currentVideo = videos[index] ?? videos[0];
@@ -64,8 +67,7 @@ export function VideoPlayer({
       .catch(() => setPlaying(false));
   }, [currentVideo?.playUrl]);
 
-  const togglePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
     if (el.paused) {
@@ -75,7 +77,7 @@ export function VideoPlayer({
       setPlaying(false);
     }
     showControlsBriefly();
-  };
+  }, [showControlsBriefly]);
 
   const goNext = useCallback(() => {
     setIndex((i) => (i + 1) % videos.length);
@@ -85,10 +87,102 @@ export function VideoPlayer({
     setIndex((i) => (i - 1 + videos.length) % videos.length);
   }, [videos.length]);
 
+  // Full TV remote (D-Pad + OK + Back) support for video playback
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isOk =
+        e.key === "Enter" ||
+        e.key === "NumpadEnter" ||
+        e.key === "Select" ||
+        e.key === "Accept";
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onExit();
+        return;
+      }
+
+      if (!controlsVisible) {
+        if (isOk || e.key === " ") {
+          e.preventDefault();
+          togglePlay();
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          if (videoRef.current) {
+            videoRef.current.currentTime = Math.min(
+              videoRef.current.duration || 0,
+              videoRef.current.currentTime + 10,
+            );
+          }
+          showControlsBriefly();
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          if (videoRef.current) {
+            videoRef.current.currentTime = Math.max(
+              0,
+              videoRef.current.currentTime - 10,
+            );
+          }
+          showControlsBriefly();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          showControlsBriefly();
+          window.requestAnimationFrame(() => {
+            focusElementForTv(playBtnRef.current);
+          });
+        }
+        return;
+      }
+
+      // Controls visible: navigate all visible buttons/slider with D-Pad
+      const container = rootRef.current;
+      if (!container) return;
+
+      if (e.key === "Select" || e.key === "Accept") {
+        const active = document.activeElement as HTMLElement | null;
+        if (active && container.contains(active)) {
+          e.preventDefault();
+          active.click();
+        }
+        return;
+      }
+
+      let dir: "up" | "down" | "left" | "right" | null = null;
+      if (e.key === "ArrowUp") dir = "up";
+      else if (e.key === "ArrowDown") dir = "down";
+      else if (e.key === "ArrowLeft") dir = "left";
+      else if (e.key === "ArrowRight") dir = "right";
+
+      if (!dir) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active instanceof HTMLInputElement &&
+        active.type === "range" &&
+        (dir === "left" || dir === "right")
+      ) {
+        showControlsBriefly();
+        return;
+      }
+
+      e.preventDefault();
+      showControlsBriefly();
+      const next = findNextFocusable(
+        container,
+        active && container.contains(active) ? active : null,
+        dir,
+      );
+      if (next) focusElementForTv(next);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [controlsVisible, onExit, showControlsBriefly, togglePlay]);
+
   if (!currentVideo) return null;
 
   return (
-    <div className="video-player-root" onClick={showControlsBriefly}>
+    <div ref={rootRef} className="video-player-root" onClick={showControlsBriefly}>
       <video
         ref={videoRef}
         className="video-element"
@@ -159,7 +253,14 @@ export function VideoPlayer({
                 上一支
               </button>
             )}
-            <button className="reader-pill-btn active" onClick={togglePlay}>
+            <button
+              ref={playBtnRef}
+              className="reader-pill-btn active"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+            >
               {playing ? <Pause size={20} /> : <Play size={20} />}
               {playing ? "暫停" : "播放"}
             </button>

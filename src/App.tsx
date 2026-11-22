@@ -71,6 +71,31 @@ export function App() {
     loadVideosFromDisk();
   }, [loadVideosFromDisk]);
 
+  // Toggle TV remote focus ring visibility automatically between touch and D-Pad
+  useEffect(() => {
+    const onPointerOrTouch = () => {
+      document.body.classList.remove("tv-remote-mode");
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key.startsWith("Arrow") ||
+        e.key === "Enter" ||
+        e.key === "Select" ||
+        e.key === "Tab"
+      ) {
+        document.body.classList.add("tv-remote-mode");
+      }
+    };
+    window.addEventListener("touchstart", onPointerOrTouch, { passive: true });
+    window.addEventListener("pointerdown", onPointerOrTouch, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("touchstart", onPointerOrTouch);
+      window.removeEventListener("pointerdown", onPointerOrTouch);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   // Android hardware back button returns to shelf from reader/video, or exits normally from shelf
   useEffect(() => {
     const handlePromise = CapApp.addListener("backButton", () => {
@@ -158,6 +183,7 @@ export function App() {
         videos={videos}
         videoFolderName={videoFolderName}
         videoLoading={videoLoading}
+        spatialNavEnabled={!showAutoplayModal && !showSettingsModal}
         onOpenBook={handleOpenBook}
         onOpenAutoplayModal={() => setShowAutoplayModal(true)}
         onOpenSettings={() => setShowSettingsModal(true)}

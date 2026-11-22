@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   BookOpen,
   Film,
@@ -7,6 +8,7 @@ import {
   Settings,
 } from "lucide-react";
 import type { LocalVideoItem, TvBook } from "../types";
+import { useSpatialNavigation } from "../utils/tvNavigation";
 
 export type ShelfTab = "books" | "videos";
 
@@ -17,6 +19,7 @@ interface HomeShelfProps {
   videos: LocalVideoItem[];
   videoFolderName: string;
   videoLoading: boolean;
+  spatialNavEnabled: boolean;
   onOpenBook: (slug: string, autoplay: boolean) => void;
   onOpenAutoplayModal: () => void;
   onOpenSettings: () => void;
@@ -32,6 +35,7 @@ export function HomeShelf({
   videos,
   videoFolderName,
   videoLoading,
+  spatialNavEnabled,
   onOpenBook,
   onOpenAutoplayModal,
   onOpenSettings,
@@ -39,8 +43,11 @@ export function HomeShelf({
   onRescanVideos,
   onPlayVideo,
 }: HomeShelfProps) {
+  const shelfRef = useRef<HTMLDivElement | null>(null);
+  useSpatialNavigation(shelfRef, spatialNavEnabled);
+
   return (
-    <div className="shelf-shell">
+    <div className="shelf-shell" ref={shelfRef}>
       <header className="shelf-header">
         <div className="brand-group">
           <span className="brand-title">Lea Books</span>
@@ -81,10 +88,11 @@ export function HomeShelf({
       <main className="shelf-content">
         {activeTab === "books" ? (
           <div className="book-grid">
-            {books.map((book) => (
+            {books.map((book, idx) => (
               <article key={book.slug} className="book-card">
                 <button
                   className="book-cover-btn"
+                  data-autofocus={idx === 0 ? "true" : undefined}
                   onClick={() => onOpenBook(book.slug, false)}
                   aria-label={`閱讀 ${book.title}`}
                 >

@@ -18,7 +18,7 @@ $innerCommand = "`$env:JAVA_HOME = `"$javaHome`"; " +
                 "`$env:ANDROID_SDK_ROOT = `"$sdkPathWin`"; " +
                 "`$env:PATH = `"$javaHome\bin;$sdkPathWin\platform-tools;`$env:PATH`"; " +
                 "Set-Location `"$androidDir`"; " +
-                ".\gradlew.bat assembleDebug; " +
+                ".\gradlew.bat assembleDebug --no-daemon; " +
                 "exit `$LASTEXITCODE"
 
 $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($innerCommand))
