@@ -4,6 +4,7 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -19,18 +20,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Loopback-only (127.0.0.1) HTTP 1.1 Range streaming server for Android SAF content:// video URIs.
- * Allows HTML5 <video> in Capacitor WebView to play large local MP4 files offline with smooth seeking.
+ * Loopback-only (127.0.0.1) HTTP 1.1 Range streaming server for Android SAF content:// URIs
+ * and legacy File paths (Android 8 Oreo fallback when DocumentsUI is absent).
  */
 public class LocalVideoHttpServer {
 
     public static class VideoTarget {
         public final Uri uri;
+        public final File file;
         public final String mimeType;
         public final long size;
 
-        public VideoTarget(Uri uri, String mimeType, long size) {
+        public VideoTarget(Uri uri, File file, String mimeType, long size) {
             this.uri = uri;
+            this.file = file;
             this.mimeType = mimeType;
             this.size = size;
         }
@@ -75,7 +78,12 @@ public class LocalVideoHttpServer {
     }
 
     public String registerVideo(String id, Uri uri, String mimeType, long size) {
-        registry.put(id, new VideoTarget(uri, mimeType, size));
+        registry.put(id, new VideoTarget(uri, null, mimeType, size));
+        return "http://127.0.0.1:" + port + "/video/" + id + "?token=" + sessionToken;
+    }
+
+    public String registerVideoFile(String id, File file, String mimeType, long size) {
+        registry.put(id, new VideoTarget(null, file, mimeType, size));
         return "http://127.0.0.1:" + port + "/video/" + id + "?token=" + sessionToken;
     }
 
@@ -126,7 +134,6 @@ public class LocalVideoHttpServer {
                 return;
             }
 
-            // Parse /video/<id>?token=<token>
             int qIdx = fullPath.indexOf('?');
             String pathOnly = qIdx >= 0 ? fullPath.substring(0, qIdx) : fullPath;
             String query = qIdx >= 0 ? fullPath.substring(qIdx + 1) : "";
@@ -143,89 +150,129 @@ public class LocalVideoHttpServer {
                 return;
             }
 
-            try (ParcelFileDescriptor pfd = appContext.getContentResolver().openFileDescriptor(target.uri, "r")) {
-                if (pfd == null) {
-                    writeSimpleResponse(out, "404 Not Found", "Cannot open video");
-                    return;
-                }
-
-                long totalLength = target.size > 0 ? target.size : pfd.getStatSize();
-                if (totalLength <= 0) {
-                    writeSimpleResponse(out, "500 Internal Server Error", "Unknown file size");
-                    return;
-                }
-
-                long start = 0;
-                long end = totalLength - 1;
-                boolean isPartial = false;
-
-                if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-                    String spec = rangeHeader.substring("bytes=".length()).split(",")[0].trim();
-                    int dash = spec.indexOf('-');
-                    if (dash >= 0) {
-                        String startStr = spec.substring(0, dash).trim();
-                        String endStr = spec.substring(dash + 1).trim();
-                        try {
-                            if (!startStr.isEmpty()) {
-                                start = Long.parseLong(startStr);
-                                if (!endStr.isEmpty()) {
-                                    end = Long.parseLong(endStr);
-                                }
-                            } else if (!endStr.isEmpty()) {
-                                long suffix = Long.parseLong(endStr);
-                                start = Math.max(0, totalLength - suffix);
-                            }
-                            if (start < 0 || start >= totalLength || end < start) {
-                                writeSimpleResponse(out, "416 Range Not Satisfiable", "Invalid range");
-                                return;
-                            }
-                            if (end >= totalLength) {
-                                end = totalLength - 1;
-                            }
-                            isPartial = true;
-                        } catch (NumberFormatException ignored) {}
-                    }
-                }
-
-                long contentLength = end - start + 1;
-                StringBuilder headers = new StringBuilder();
-                headers.append(isPartial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
-                headers.append("Content-Type: ").append(target.mimeType).append("\r\n");
-                headers.append("Accept-Ranges: bytes\r\n");
-                headers.append("Content-Length: ").append(contentLength).append("\r\n");
-                if (isPartial) {
-                    headers.append("Content-Range: bytes ")
-                           .append(start).append("-").append(end)
-                           .append("/").append(totalLength).append("\r\n");
-                }
-                headers.append("Access-Control-Allow-Origin: *\r\n");
-                headers.append("Connection: close\r\n\r\n");
-
-                out.write(headers.toString().getBytes(StandardCharsets.US_ASCII));
-                if ("HEAD".equalsIgnoreCase(method)) {
-                    out.flush();
-                    return;
-                }
-
-                try (FileInputStream fis = new FileInputStream(pfd.getFileDescriptor())) {
-                    if (start > 0) {
-                        fis.getChannel().position(start);
-                    }
-                    byte[] buffer = new byte[64 * 1024];
-                    long remaining = contentLength;
-                    while (remaining > 0) {
-                        int toRead = (int) Math.min(buffer.length, remaining);
-                        int read = fis.read(buffer, 0, toRead);
-                        if (read == -1) break;
-                        out.write(buffer, 0, read);
-                        remaining -= read;
-                    }
-                    out.flush();
-                }
+            if (target.file != null) {
+                streamFromFile(target, method, rangeHeader, out);
+            } else {
+                streamFromContentUri(target, method, rangeHeader, out);
             }
         } catch (IOException ignored) {
             // Client closed connection early (normal during video seeking)
         }
+    }
+
+    private void streamFromFile(
+        VideoTarget target,
+        String method,
+        String rangeHeader,
+        OutputStream out
+    ) throws IOException {
+        if (!target.file.exists() || !target.file.canRead()) {
+            writeSimpleResponse(out, "404 Not Found", "Cannot open video file");
+            return;
+        }
+        long totalLength = target.file.length();
+        try (FileInputStream fis = new FileInputStream(target.file)) {
+            streamInputStream(fis, totalLength, target.mimeType, method, rangeHeader, out);
+        }
+    }
+
+    private void streamFromContentUri(
+        VideoTarget target,
+        String method,
+        String rangeHeader,
+        OutputStream out
+    ) throws IOException {
+        try (ParcelFileDescriptor pfd =
+                 appContext.getContentResolver().openFileDescriptor(target.uri, "r")) {
+            if (pfd == null) {
+                writeSimpleResponse(out, "404 Not Found", "Cannot open video");
+                return;
+            }
+            long totalLength = target.size > 0 ? target.size : pfd.getStatSize();
+            try (FileInputStream fis = new FileInputStream(pfd.getFileDescriptor())) {
+                streamInputStream(fis, totalLength, target.mimeType, method, rangeHeader, out);
+            }
+        }
+    }
+
+    private void streamInputStream(
+        FileInputStream fis,
+        long totalLength,
+        String mimeType,
+        String method,
+        String rangeHeader,
+        OutputStream out
+    ) throws IOException {
+        if (totalLength <= 0) {
+            writeSimpleResponse(out, "500 Internal Server Error", "Unknown file size");
+            return;
+        }
+
+        long start = 0;
+        long end = totalLength - 1;
+        boolean isPartial = false;
+
+        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+            String spec = rangeHeader.substring("bytes=".length()).split(",")[0].trim();
+            int dash = spec.indexOf('-');
+            if (dash >= 0) {
+                String startStr = spec.substring(0, dash).trim();
+                String endStr = spec.substring(dash + 1).trim();
+                try {
+                    if (!startStr.isEmpty()) {
+                        start = Long.parseLong(startStr);
+                        if (!endStr.isEmpty()) {
+                            end = Long.parseLong(endStr);
+                        }
+                    } else if (!endStr.isEmpty()) {
+                        long suffix = Long.parseLong(endStr);
+                        start = Math.max(0, totalLength - suffix);
+                    }
+                    if (start < 0 || start >= totalLength || end < start) {
+                        writeSimpleResponse(out, "416 Range Not Satisfiable", "Invalid range");
+                        return;
+                    }
+                    if (end >= totalLength) {
+                        end = totalLength - 1;
+                    }
+                    isPartial = true;
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+
+        long contentLength = end - start + 1;
+        StringBuilder headers = new StringBuilder();
+        headers.append(isPartial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
+        headers.append("Content-Type: ").append(mimeType).append("\r\n");
+        headers.append("Accept-Ranges: bytes\r\n");
+        headers.append("Content-Length: ").append(contentLength).append("\r\n");
+        if (isPartial) {
+            headers.append("Content-Range: bytes ")
+                   .append(start).append("-").append(end)
+                   .append("/").append(totalLength).append("\r\n");
+        }
+        headers.append("Access-Control-Allow-Origin: *\r\n");
+        headers.append("Connection: close\r\n\r\n");
+
+        out.write(headers.toString().getBytes(StandardCharsets.US_ASCII));
+        if ("HEAD".equalsIgnoreCase(method)) {
+            out.flush();
+            return;
+        }
+
+        if (start > 0) {
+            fis.getChannel().position(start);
+        }
+        byte[] buffer = new byte[64 * 1024];
+        long remaining = contentLength;
+        while (remaining > 0) {
+            int toRead = (int) Math.min(buffer.length, remaining);
+            int read = fis.read(buffer, 0, toRead);
+            if (read == -1) break;
+            out.write(buffer, 0, read);
+            remaining -= read;
+        }
+        out.flush();
     }
 
     private void writeSimpleResponse(OutputStream out, String status, String body) throws IOException {

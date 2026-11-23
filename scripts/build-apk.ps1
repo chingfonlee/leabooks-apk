@@ -1,8 +1,12 @@
 $ErrorActionPreference = "Stop"
 
-$sdkPathWin   = "C:\Users\user\AppData\Local\Android\Sdk"
-$sdkPathProps = "C:/Users/user/AppData/Local/Android/Sdk"
-$javaHome     = "C:\Program Files\Android\Android Studio\jbr"
+$sdkPathWin = if ($env:ANDROID_HOME) { $env:ANDROID_HOME }
+              elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
+              else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
+
+$sdkPathProps = $sdkPathWin -replace '\\', '/'
+$javaHome     = if ($env:JAVA_HOME) { $env:JAVA_HOME }
+                else { "C:\Program Files\Android\Android Studio\jbr" }
 
 $projectRoot  = Resolve-Path (Join-Path $PSScriptRoot "..")
 $androidDir   = Join-Path $projectRoot "android"

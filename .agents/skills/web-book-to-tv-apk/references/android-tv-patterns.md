@@ -18,6 +18,25 @@ On `<activity android:name=".MainActivity">`:
 - `android:screenOrientation="sensorLandscape"`
 - Add `<category android:name="android.intent.category.LEANBACK_LAUNCHER" />` alongside `LAUNCHER` inside the main `<intent-filter>`.
 
+For Android 8–10 stripped TV ROMs that lack `DocumentsUI` (SAF picker), also declare:
+```xml
+<uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+```
+
+---
+
+## 1.5 Android 8 Oreo (Chrome 60+ WebView) Compatibility Rules
+
+Offline Android 8 TVs typically ship with Chrome 60–69 System WebView. Keep a single APK compatible from Android 8 through Android 14+:
+- **Vite Legacy Split**: Install `@vitejs/plugin-legacy` (matching your Vite major version) + `terser` with `targets: ["chrome >= 60", "android >= 8"]` and `modernPolyfills: true`. Modern WebView (Android 14) loads only modern ES chunks; Android 8 automatically falls back to `nomodule` legacy chunks.
+- **CSS Fallbacks**:
+  - Replace `inset: 0` (Chrome 87+) with `top: 0; right: 0; bottom: 0; left: 0;`.
+  - Replace `aspect-ratio: 16 / 9` (Chrome 88+) with `height: 0; padding-top: 56.25%;` + absolutely positioned `<img>`.
+  - Add a fixed `font-size` line immediately before every `clamp(...)` (Chrome 79+).
+- **SAF Missing Fallback**: Catch `ActivityNotFoundException` on `ACTION_OPEN_DOCUMENT_TREE` and fall back to `READ_EXTERNAL_STORAGE` + scanning `Movies/LeaBookVideos` (implemented in `../resources/LocalVideoLibraryPlugin.java` and `LocalVideoHttpServer.java`).
+
 ---
 
 ## 2. Android 14 Local Video Folder Playback (SAF + Loopback HTTP Range)

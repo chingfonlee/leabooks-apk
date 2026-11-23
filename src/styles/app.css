@@ -113,6 +113,7 @@ body.tv-remote-mode .book-card:has(:focus) {
 }
 
 .brand-title {
+  font-size: 30px;
   font-size: clamp(24px, 2.2vw, 34px);
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -120,6 +121,7 @@ body.tv-remote-mode .book-card:has(:focus) {
 }
 
 .brand-badge {
+  font-size: 15px;
   font-size: clamp(13px, 1vw, 16px);
   font-weight: 600;
   color: var(--accent);
@@ -144,6 +146,7 @@ body.tv-remote-mode .book-card:has(:focus) {
   gap: 10px;
   padding: 12px 28px;
   border-radius: var(--radius-pill);
+  font-size: 20px;
   font-size: clamp(17px, 1.3vw, 22px);
   font-weight: 700;
   color: var(--text-secondary);
@@ -167,6 +170,7 @@ body.tv-remote-mode .book-card:has(:focus) {
   gap: 10px;
   padding: 14px 22px;
   border-radius: var(--radius-pill);
+  font-size: 18px;
   font-size: clamp(16px, 1.15vw, 20px);
   font-weight: 700;
   background: var(--bg-surface);
@@ -232,14 +236,21 @@ body.tv-remote-mode .book-card:has(:focus) {
 
 .book-cover-btn {
   position: relative;
+  display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: 0;
+  padding-top: 56.25%;
   background: #0b0e13;
   overflow: hidden;
-  padding: 0;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
 }
 
 .book-cover-img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -268,6 +279,7 @@ body.tv-remote-mode .book-card:has(:focus) {
 }
 
 .book-card-title {
+  font-size: 20px;
   font-size: clamp(17px, 1.25vw, 22px);
   font-weight: 700;
   color: var(--text-primary);
@@ -361,6 +373,9 @@ body.tv-remote-mode .book-card:has(:focus) {
 }
 
 .video-placeholder-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
@@ -372,7 +387,10 @@ body.tv-remote-mode .book-card:has(:focus) {
 
 .video-play-overlay {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -404,7 +422,10 @@ body.tv-remote-mode .book-card:has(:focus) {
 
 .reader-stage {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -513,11 +534,13 @@ body.tv-remote-mode .book-card:has(:focus) {
 }
 
 .reader-book-title {
+  font-size: 24px;
   font-size: clamp(20px, 1.6vw, 28px);
   font-weight: 800;
 }
 
 .reader-page-counter {
+  font-size: 18px;
   font-size: clamp(16px, 1.2vw, 20px);
   font-weight: 700;
   color: var(--accent);
@@ -529,6 +552,7 @@ body.tv-remote-mode .book-card:has(:focus) {
   gap: 8px;
   padding: 12px 20px;
   border-radius: var(--radius-pill);
+  font-size: 17px;
   font-size: clamp(15px, 1.1vw, 19px);
   font-weight: 700;
   background: rgba(20, 24, 32, 0.82);
@@ -589,6 +613,7 @@ body.tv-remote-mode .book-card:has(:focus) {
   margin: 0;
   max-width: 1440px;
   text-align: center;
+  font-size: 34px;
   font-size: clamp(24px, 2.5vw, 44px);
   font-weight: 700;
   line-height: 1.48;
@@ -716,7 +741,10 @@ body.tv-remote-mode .book-card:has(:focus) {
 
 .modal-backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 50;
   background: rgba(6, 8, 12, 0.78);
   display: flex;

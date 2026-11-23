@@ -57,8 +57,9 @@ When the target TV APK project already exists:
    - Check text length per page (average & max characters) to size cinema subtitle chunking appropriately.
    - Check audio file uniqueness (SHA-256) to estimate APK footprint.
 2. **Scaffold Vite + React + TypeScript + Capacitor**
-   - Configure `vite.config.ts` with `base: "./"` and `assetsInlineLimit: 0`.
-   - Configure `capacitor.config.ts` with `server: { androidScheme: "http", cleartext: true }` so loopback `http://127.0.0.1:<port>` video streaming works without mixed-content blocks on Android 14.
+   - Configure `vite.config.ts` with `base: "./"`, `assetsInlineLimit: 0`, and `@vitejs/plugin-legacy` (`targets: ["chrome >= 60", "android >= 8"]`, `modernPolyfills: true`, plus `terser`) so offline Android 8 Oreo TVs with legacy System WebView (Chrome 60–69) never hit blank screens while Android 14 loads modern ES bundles.
+   - Configure `capacitor.config.ts` with `server: { androidScheme: "http", cleartext: true }` and `android: { minWebViewVersion: 60 }`.
+   - In CSS, avoid bare `inset: 0` (use `top/right/bottom/left: 0`), avoid `aspect-ratio` (use `height: 0; padding-top: 56.25%` + absolute image), and put a fixed `font-size` fallback before every `clamp(...)`.
 3. **Write Read-Only Book Importer (`scripts/import-books.mjs`)**
    - Read source metadata without modifying the source repo.
    - Sort books naturally (`01`, `02`, ...).
@@ -91,7 +92,7 @@ When the target TV APK project already exists:
 - [ ] `npm run build` (`tsc --noEmit && vite build`) exits with code 0.
 - [ ] `npx cap sync android` copies assets without plugin errors.
 - [ ] `.\gradlew.bat assembleDebug --no-daemon` (or `assembleRelease`) finishes with `BUILD SUCCESSFUL` and exits promptly.
-- [ ] Resulting APK is copied to `release/`, verified with updated timestamp, size, and SHA-256.
+- [ ] Resulting APK is copied to `release/`, verified with updated timestamp, size, SHA-256, and `aapt2 dump badging` (`minSdkVersion`, `LEANBACK_LAUNCHER`, `touchscreen` not required, legacy JS chunks present inside APK).
 - [ ] Both touch controls and D-Pad (`↑↓←→`, `OK`, `Back`) work across Shelf, Modals, Book Reader, and Video Player.
 - [ ] *(Optional, when device is connected via ADB)* Verify overwrite install and remote keys:
   ```powershell

@@ -1,30 +1,47 @@
 package com.leabook.tv;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-@CapacitorPlugin(name = "LocalVideoLibrary")
+@CapacitorPlugin(
+    name = "LocalVideoLibrary",
+    permissions = {
+        @Permission(
+            alias = "storage",
+            strings = { Manifest.permission.READ_EXTERNAL_STORAGE }
+        )
+    }
+)
 public class LocalVideoLibraryPlugin extends Plugin {
 
     private static final String PREFS_NAME = "lea_book_tv_video_prefs";
     private static final String KEY_TREE_URI = "video_tree_uri";
+    private static final String KEY_LEGACY_MODE = "video_legacy_mode";
 
     private LocalVideoHttpServer httpServer;
 
@@ -46,16 +63,24 @@ public class LocalVideoLibraryPlugin extends Plugin {
     public void getSavedFolder(PluginCall call) {
         Uri treeUri = loadSavedTreeUri();
         JSObject ret = new JSObject();
-        if (treeUri == null) {
-            ret.put("hasFolder", false);
-            ret.put("folderName", "");
+        if (treeUri != null) {
+            DocumentFile dir = DocumentFile.fromTreeUri(getContext(), treeUri);
+            boolean valid = dir != null && dir.exists() && dir.canRead();
+            ret.put("hasFolder", valid);
+            ret.put("folderName", valid && dir.getName() != null ? dir.getName() : "");
             call.resolve(ret);
             return;
         }
-        DocumentFile dir = DocumentFile.fromTreeUri(getContext(), treeUri);
-        boolean valid = dir != null && dir.exists() && dir.canRead();
-        ret.put("hasFolder", valid);
-        ret.put("folderName", valid && dir.getName() != null ? dir.getName() : "");
+        if (isLegacyModeSaved()) {
+            File legacyDir = resolveLegacyDirectory();
+            boolean valid = legacyDir != null && legacyDir.exists() && legacyDir.canRead();
+            ret.put("hasFolder", valid);
+            ret.put("folderName", valid ? "Movies/" + legacyDir.getName() : "");
+            call.resolve(ret);
+            return;
+        }
+        ret.put("hasFolder", false);
+        ret.put("folderName", "");
         call.resolve(ret);
     }
 
@@ -67,7 +92,35 @@ public class LocalVideoLibraryPlugin extends Plugin {
                 | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                 | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
         );
-        startActivityForResult(call, intent, "handleFolderPicked");
+        try {
+            startActivityForResult(call, intent, "handleFolderPicked");
+        } catch (ActivityNotFoundException e) {
+            // Fallback for stripped Android 8-10 TV ROMs without DocumentsUI
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                requestLegacyStorageAndList(call);
+            } else {
+                call.reject("No folder picker available on this device");
+            }
+        }
+    }
+
+    private void requestLegacyStorageAndList(PluginCall call) {
+        if (getPermissionState("storage") == PermissionState.GRANTED) {
+            setLegacyModeSaved(true);
+            resolveLegacyVideoList(call);
+        } else {
+            requestPermissionForAlias("storage", call, "handleLegacyStoragePermission");
+        }
+    }
+
+    @PermissionCallback
+    private void handleLegacyStoragePermission(PluginCall call) {
+        if (getPermissionState("storage") == PermissionState.GRANTED) {
+            setLegacyModeSaved(true);
+            resolveLegacyVideoList(call);
+        } else {
+            call.reject("Storage permission denied");
+        }
     }
 
     @ActivityCallback
@@ -93,21 +146,91 @@ public class LocalVideoLibraryPlugin extends Plugin {
         }
 
         saveTreeUri(treeUri);
+        setLegacyModeSaved(false);
         resolveVideoList(call, treeUri);
     }
 
     @PluginMethod
     public void listVideos(PluginCall call) {
         Uri treeUri = loadSavedTreeUri();
-        if (treeUri == null) {
+        if (treeUri != null) {
+            resolveVideoList(call, treeUri);
+            return;
+        }
+        if (isLegacyModeSaved() && getPermissionState("storage") == PermissionState.GRANTED) {
+            resolveLegacyVideoList(call);
+            return;
+        }
+        JSObject ret = new JSObject();
+        ret.put("hasFolder", false);
+        ret.put("folderName", "");
+        ret.put("videos", new JSArray());
+        call.resolve(ret);
+    }
+
+    private void resolveLegacyVideoList(PluginCall call) {
+        File dir = resolveLegacyDirectory();
+        if (dir == null || !dir.exists() || !dir.canRead()) {
             JSObject ret = new JSObject();
             ret.put("hasFolder", false);
-            ret.put("folderName", "");
+            ret.put("folderName", "Movies/LeaBookVideos");
             ret.put("videos", new JSArray());
             call.resolve(ret);
             return;
         }
-        resolveVideoList(call, treeUri);
+
+        try {
+            httpServer.ensureStarted();
+        } catch (IOException e) {
+            call.reject("Failed to start local video server: " + e.getMessage());
+            return;
+        }
+
+        File[] children = dir.listFiles();
+        List<File> videoFiles = new ArrayList<>();
+        if (children != null) {
+            for (File f : children) {
+                if (f != null && f.isFile() && isSupportedVideoName(f.getName())) {
+                    videoFiles.add(f);
+                }
+            }
+        }
+        videoFiles.sort(Comparator.comparing(f -> f.getName().toLowerCase(Locale.ROOT)));
+
+        httpServer.clearRegistry();
+        JSArray videosArray = new JSArray();
+        int idx = 0;
+        for (File file : videoFiles) {
+            String id = "v" + (idx++);
+            String name = file.getName();
+            String mime = detectMimeType(name, null);
+            long size = file.length();
+            String playUrl = httpServer.registerVideoFile(id, file, mime, size);
+
+            JSObject item = new JSObject();
+            item.put("id", id);
+            item.put("name", name);
+            item.put("size", size);
+            item.put("mimeType", mime);
+            item.put("playUrl", playUrl);
+            videosArray.put(item);
+        }
+
+        JSObject ret = new JSObject();
+        ret.put("hasFolder", true);
+        ret.put("folderName", "Movies/" + dir.getName());
+        ret.put("videos", videosArray);
+        call.resolve(ret);
+    }
+
+    private File resolveLegacyDirectory() {
+        File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+        if (movies == null) return null;
+        File dedicated = new File(movies, "LeaBookVideos");
+        if (dedicated.exists() && dedicated.isDirectory()) {
+            return dedicated;
+        }
+        return movies;
     }
 
     private void resolveVideoList(PluginCall call, Uri treeUri) {
@@ -131,7 +254,7 @@ public class LocalVideoLibraryPlugin extends Plugin {
         DocumentFile[] children = dir.listFiles();
         List<DocumentFile> videoFiles = new ArrayList<>();
         for (DocumentFile f : children) {
-            if (f != null && f.isFile() && isSupportedVideo(f)) {
+            if (f != null && f.isFile() && isSupportedVideoName(f.getName())) {
                 videoFiles.add(f);
             }
         }
@@ -165,8 +288,7 @@ public class LocalVideoLibraryPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    private boolean isSupportedVideo(DocumentFile file) {
-        String name = file.getName();
+    private boolean isSupportedVideoName(String name) {
         if (name == null) return false;
         String lower = name.toLowerCase(Locale.ROOT);
         return lower.endsWith(".mp4")
@@ -196,5 +318,15 @@ public class LocalVideoLibraryPlugin extends Plugin {
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String raw = prefs.getString(KEY_TREE_URI, null);
         return raw != null ? Uri.parse(raw) : null;
+    }
+
+    private void setLegacyModeSaved(boolean enabled) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putBoolean(KEY_LEGACY_MODE, enabled).apply();
+    }
+
+    private boolean isLegacyModeSaved() {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getBoolean(KEY_LEGACY_MODE, false);
     }
 }
