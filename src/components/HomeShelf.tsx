@@ -90,22 +90,24 @@ export function HomeShelf({
           <div className="book-grid">
             {books.map((book, idx) => (
               <article key={book.slug} className="book-card">
-                <button
-                  className="book-cover-btn"
-                  data-autofocus={idx === 0 ? "true" : undefined}
-                  onClick={() => onOpenBook(book.slug, false)}
-                  aria-label={`閱讀 ${book.title}`}
-                >
-                  <img
-                    className="book-cover-img"
-                    src={book.coverImage}
-                    alt={book.title}
-                    loading="eager"
-                  />
-                  <span className="book-order-chip">
-                    {String(book.order).padStart(2, "0")}
-                  </span>
-                </button>
+                <div className="book-cover-box">
+                  <button
+                    className="book-cover-btn"
+                    data-autofocus={idx === 0 ? "true" : undefined}
+                    onClick={() => onOpenBook(book.slug, false)}
+                    aria-label={`閱讀 ${book.title}`}
+                  >
+                    <img
+                      className="book-cover-img"
+                      src={book.coverImage}
+                      alt={book.title}
+                      loading="eager"
+                    />
+                    <span className="book-order-chip">
+                      {String(book.order).padStart(2, "0")}
+                    </span>
+                  </button>
+                </div>
                 <div className="book-card-footer">
                   <span
                     className="book-card-title"
@@ -197,28 +199,30 @@ export function HomeShelf({
               <div className="book-grid">
                 {videos.map((video, idx) => (
                   <article key={video.id} className="book-card">
-                    <button
-                      className="book-cover-btn"
-                      onClick={() => onPlayVideo(idx)}
-                      aria-label={`播放影片 ${video.displayTitle}`}
-                    >
-                      {video.coverImage ? (
-                        <img
-                          className="book-cover-img"
-                          src={video.coverImage}
-                          alt={video.displayTitle}
-                        />
-                      ) : (
-                        <div className="video-placeholder-cover">
-                          <Film size={52} />
+                    <div className="book-cover-box">
+                      <button
+                        className="book-cover-btn"
+                        onClick={() => onPlayVideo(idx)}
+                        aria-label={`播放影片 ${video.displayTitle}`}
+                      >
+                        {video.coverImage ? (
+                          <img
+                            className="book-cover-img"
+                            src={video.coverImage}
+                            alt={video.displayTitle}
+                          />
+                        ) : (
+                          <div className="video-placeholder-cover">
+                            <Film size={52} />
+                          </div>
+                        )}
+                        <div className="video-play-overlay">
+                          <div className="video-play-circle">
+                            <Play size={28} fill="#fff" />
+                          </div>
                         </div>
-                      )}
-                      <div className="video-play-overlay">
-                        <div className="video-play-circle">
-                          <Play size={28} fill="#fff" />
-                        </div>
-                      </div>
-                    </button>
+                      </button>
+                    </div>
                     <div className="book-card-footer">
                       <span className="book-card-title">{video.displayTitle}</span>
                     </div>
